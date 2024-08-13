@@ -35,7 +35,7 @@ public class SkeenNettyServerChannel extends Thread {
             .childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new SkeenMessageDecoder(), new SkeenMessageEncoder(),
+                    ch.pipeline().addLast(new SkeenMessageDecoder(server.getSizes()), new SkeenMessageEncoder(),
                     new SkeenNettyServerChannelHandler(server));
                 }
             })

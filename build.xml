@@ -7,7 +7,7 @@
 	<property name="lib" location="lib" />
 
 	<target name="main" depends="compile, jar" description="Main target">
-		<echo>Building the Project.</echo>
+		<echo>Building Skeen.</echo>
 	</target>
 
 	<path id="libs">
@@ -23,7 +23,7 @@
 	</target>
 
 	<target name="jar" description="Compression target">
-		<jar jarfile="${dist.dir}/GenByzCast.jar">
+		<jar jarfile="${dist.dir}/Skeen.jar">
 			<fileset dir="${build.dir}">
 				<include name="**/*.class" />
 			</fileset>

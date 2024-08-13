@@ -3,10 +3,14 @@ package util;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.Vector;
+
+import skeen.messages.SkeenMessage.Type;
 
 /**
  * @author Paulo Coelho - paulo.coelho@usi.ch
@@ -14,36 +18,22 @@ import java.util.Vector;
 public class Stats {
     private Vector<Long> values;
     private Vector<Boolean> isGlobal;
-    //private Vector<Integer> dstSize;
     private int accCount, limit;
-    // private Vector<Value> valuesPerNode;
-    // private int numNodes;
-
     private int [] throughput;
     private int now = 0;
-
-    class Value {
-        short node;
-        long value;
-        boolean isGlobal;
-        //int dstSize;
-        public Value(short node, long value, boolean isGlobal, int dstSize) {
-            this.node = node;
-            this.value = value;
-            this.isGlobal = isGlobal;
-            //this.dstSize = dstSize;
-        }
-    }
-
+    private short numNodes=0;
     /**
      * Creates a new instance of Stats
      */
-    public Stats(int duration) {
+    public Stats() {
         values = new Vector<>();
-        // valuesPerNode = new Vector<>();
         isGlobal = new Vector<>();
-        //dstSize = new Vector<>();
         accCount = 0;
+    }
+
+    public Stats(int duration, short numNodes) {
+        this();
+        this.numNodes = numNodes;
         throughput = new int[duration+1];
         System.out.println("Start tp measurements");
         new Timer().scheduleAtFixedRate(new TimerTask() {
@@ -58,17 +48,12 @@ public class Stats {
         return values.size();
     }
 
-    public void store(long value, boolean isGlobal){//, int dstSize) {
+    public void store(long value, boolean isGlobal){
         values.add(value);
         this.isGlobal.add(isGlobal);
-        //this.dstSize.add(dstSize);
         accCount++;
         try{throughput[now]++;}catch(Exception e){}
     }
-
-    // public void store(short node, long value, boolean isGlobal, int dstSize) {
-    //     valuesPerNode.add(new Value(node, value, isGlobal, dstSize));
-    // }
 
     public int getPartialCount() {
         int temp = accCount;
@@ -138,45 +123,20 @@ public class Stats {
     }
 
     public void persist(String fileName, int discardPercent) {
-        // File f = new File(fileName.replace(".txt", "Geral.txt"));
         File f = new File(fileName);
         long abs = 0;
         int order = 0;
         try {
             FileWriter fw = new FileWriter(f);
-            // fw.write("ORDER\tLATENCY\tABS\tTYPE\tDSTSIZE\n");
             fw.write("ORDER\tLATENCY\tABS\tTYPE\n");
             for (int i = 0; i < values.size(); i++) {
                 abs += values.get(i);
                 fw.write(++order + "\t" + values.get(i) + "\t" + abs + "\t" + (isGlobal.get(i) ? "global" : "local") /*+ "\t" + this.dstSize.get(i)*/ +  "\n");
             }
-
             fw.write("\n");
             fw.write(toString(discardPercent));
             fw.flush();
             fw.close();
-
-            // separate latencies
-            // FileWriter [] files = new FileWriter[numNodes];
-            // for(int i=0; i < numNodes; i++) 
-            //     files[i] = new FileWriter(new File(fileName.replace(".txt", "Node"+i+".txt")));
-            
-            // abs = 0;
-            // order = 0;
-            
-            // for(int i=0; i < numNodes; i++)
-            //     files[i].write("ORDER\tLATENCY\tABS\tTYPE\tDSTSIZE\n");
-
-            // for (int i = 0; i < valuesPerNode.size(); i++) {
-            //     abs += valuesPerNode.get(i).value;
-            //     files[valuesPerNode.get(i).node].write(++order +  "\t" + valuesPerNode.get(i).value + "\t" + abs + "\t" + (valuesPerNode.get(i).isGlobal ? "global" : "local") + "\t" + valuesPerNode.get(i).dstSize + "\n");
-            // }
-
-            // for(int i=0; i < numNodes; i++){
-            //     files[i].flush();
-            //     files[i].close();
-            // }
-
         } catch (IOException ex) {
             System.err.println("Unable to save stats to file");
             ex.printStackTrace();
@@ -196,6 +156,69 @@ public class Stats {
                 getPercentile(95, discardPercent) + ", " + getPercentile(99, discardPercent) + ")\n--------------\n\n");
         return sb.toString();
     }
+
+
+    ////////
+
+    class ValuesPerNode {
+        long [] values;
+        short[] dsts;
+        boolean isGlobal;
+        Type type;
+        public ValuesPerNode(long [] values, boolean isGlobal, short[] dsts, Type type) {
+            this.values = values;
+            this.isGlobal = isGlobal;
+            this.dsts = dsts;
+            this.type = type;
+        }
+    }
+
+    ArrayList<ValuesPerNode> valuesPerNode = new ArrayList<>();
+
+    public void store(HashMap<Short, Long> latsPerNode, boolean isGlobal, short[] dsts, Type type) {
+        long [] val = new long[numNodes];
+        for(short node : latsPerNode.keySet()){
+            val[node] = latsPerNode.get(node);
+        }
+        valuesPerNode.add(new ValuesPerNode(val, isGlobal, dsts, type));
+    }
+
+    public void persistPerNodes(String fileName, int discardPercent) {
+        File f = new File(fileName);
+        int order = 0;
+        try {
+            FileWriter fw = new FileWriter(f);
+
+            fw.write("ORDER\t");
+            for(int i = 0; i < numNodes; i++) fw.write("LAT_"+i+"\t");
+            fw.write("DSTS\t");
+            fw.write("TYPE\t");
+            fw.write("MSGTYPE\n");
+
+            for (int i = 0; i < valuesPerNode.size(); i++) {
+                ValuesPerNode value = valuesPerNode.get(i);
+                fw.write(++order + "\t");
+                for(int j = 0; j < numNodes; j++){
+                    fw.write(value.values[j] + "\t");
+                }
+                String dsts="[";
+
+                for(int x=0; x<value.dsts.length; x++){
+                    if(x>0) dsts += ",";
+                    dsts += value.dsts[x];
+                }
+
+                dsts+="]";
+                fw.write(dsts + "\t" + (value.isGlobal ? "global" : "local")+ "\t" + value.type  + "\n");
+            }
+
+            fw.write("\n");
+            fw.write(toString(discardPercent));
+            fw.flush();
+            fw.close();
+        } catch (IOException ex) {
+            System.err.println("Unable to save stats to file");
+            ex.printStackTrace();
+        }
+    }
 }
-
-

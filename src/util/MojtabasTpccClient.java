@@ -1,43 +1,34 @@
-package skeen;
+package util;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.Random;
-import java.util.concurrent.BrokenBarrierException;
-import skeen.messages.SkeenMessage;
-import util.ArgsParser;
-import util.FileManager;
-import util.Stats;
+import java.util.*;
 
-public class TpccSkeenClient extends SkeenClient {
+public class MojtabasTpccClient {
     private final Random gen;
-    private int NUM_TX = 0;
-    private int warehouseCount = 10;  // number of warehouses
-    private int warehouseID = 0;  // client's main warehouse
-    private int localityPercentage = 99;
+
+    private static final int NUM_TX = 1000000;
+    private static final int warehouseCount = 10;  // number of warehouses
+    private static final int warehouseID = 1;  // client's main warehouse
+
     // Tpcc workload
     private static final int newOrderWeight = 45;
     private static final int paymentWeight = 43;
     private static final int orderStatusWeight = 4;
     private static final int deliveryWeight = 4;
     private static final int stockLevelWeight = 4;
-    private HashMap<Short, String> nearestWHs = new HashMap<>();
 
     // enable for local-only workload
-    boolean localOnly = false;
+    boolean sanityCheck = false;
+
     double numNewOrderTx = 0;
     double numPaymentTx = 0;
     double numOrderStatusTx = 0;
     double numDeliveryTx = 0;
     double numStockLevelTx = 0;
+
     double multiPartitionTx = 0;
     double partitionsAccessedMultiPartitionTxs = 0;
     double partitionsAccessedAllTxs = 0;
+
     double numItemsAccessesNewOrder;
 
     int dest2NewOrder = 0;
@@ -52,43 +43,17 @@ public class TpccSkeenClient extends SkeenClient {
     int dest10 = 0;
     int dest1 = 0;
 
-    public TpccSkeenClient(short id, ArgsParser args) {
-        super(id, args, false);
+    public MojtabasTpccClient() {
         this.gen = new Random(System.nanoTime());
-        print("Skeen TPC-C Client");
-        FileManager.loadLocalityFile(nearestWHs);
-        run();
     }
-    
+
+    public static void main(String[] args) {
+        MojtabasTpccClient t = new MojtabasTpccClient();
+        t.run();
+    }
+
     public void run() {
-        this.warehouseCount = numNodes;
-        this.warehouseID = args.getHomeWarehouse();
-        // wait all netty threads connect to all servers
-        try {syncAllConnections.await();} catch(InterruptedException|BrokenBarrierException e){print("Broken barrier!!!!");}
-        // send initialization message to all servers
-        sendInitMessage();
-        sleep(2000);
-        // send ready message to a server
-        // the server will reply when all clients are ready, then we "guarantee" all clients start at (~) the same time
-        sendReadyMessage();
-        print("All other clients ready!");
-
-        print("Started Skeen TPC-C experiment. Num nodes:", numNodes);
-        print("My home warehouse:", warehouseID);
-
-        print("Locality", args.getLocality(), "%");
-        localityPercentage = args.getLocality();
-        stats = new Stats(totalTime, numNodes);
-
-        executeTransactions();
-
-        if (stats.getCount() > 0) {
-            try {Files.createDirectories(Paths.get("results" + (args.getRegion().equals("") ? "" : "/"+args.getRegion())));} catch (IOException e) {}
-            stats.persist("results" + (args.getRegion().equals("") ? "" : "/"+args.getRegion()) + "/" + getId() + "-stats-tpcc-skeen-client.txt", 10);
-            print("LOCAL STATS:", stats);
-        }
-
-        sendEndMessage();
+        executeTransactions(NUM_TX);
 
         System.out.println();
         System.out.println("Ratio of NewOrder Txs: " + numNewOrderTx / NUM_TX * 100 + "%");
@@ -121,138 +86,44 @@ public class TpccSkeenClient extends SkeenClient {
         System.out.println("# of Txs that targets 8 WH: " + dest8);
         System.out.println("# of Txs that targets 9 WH: " + dest9);
         System.out.println("# of Txs that targets 10 WH: " + dest10);
-        print();
-        printWloadDistribution();
-        exit();
     }
-    
-    private void executeTransactions() {
 
-        long startTime = System.nanoTime(), now;
-        long elapsed = 0, usLat = startTime;
-        int totalMsgs=0;
+    private void executeTransactions(int numTransactions) {
+        if (numTransactions != -1)
+            System.out.println("Creating " + numTransactions + " transactions for " + warehouseCount + " warehouses");
+        else
+            System.out.println("Creating Txs for a limited time for " + warehouseCount + " warehouses");
 
-        while (elapsed / 1e9 < totalTime) {
-            int transactionType = randomNumber(1, 100, gen);
-            int numDests = 1;
+        for (int i = 0; (i < numTransactions || numTransactions == -1) ; i++) {
+            //String transactionTypeName;
+            long transactionType = randomNumber(1, 100, gen);
 
             if (transactionType <= newOrderWeight) {
                 //transactionTypeName = "New-Order";
-                numDests = doNewOrder();
+                doNewOrder();
             } else if (transactionType <= newOrderWeight + paymentWeight) {
                 //transactionTypeName = "Payment";
-                numDests = doPayment();
+                doPayment();
             } else if (transactionType <= newOrderWeight + paymentWeight + orderStatusWeight) {
                 //transactionTypeName = "Order-Status";
-                numDests = doOrderStatus();
+                doOrderStatus();
             } else if (transactionType <= newOrderWeight + paymentWeight + orderStatusWeight + deliveryWeight) {
                 //transactionTypeName = "Delivery";
-                numDests = doDelivery();
+                doDelivery();
             } else if (transactionType <= newOrderWeight + paymentWeight + orderStatusWeight + deliveryWeight + stockLevelWeight) {
                 //transactionTypeName = "Stock-Level";
-                numDests = doStockLevel();
+                doStockLevel();
             }
-
-            SkeenMessage m = newMessageTo(generateDests(numDests));
-
-            multicast(m, (short) warehouseID);
-            computeDistribution(m);
-
-            now = System.nanoTime();
-            elapsed = (now - startTime);
-            stats.store((now - usLat) / 1000, (numDests > 1));
-            usLat = now;
-            NUM_TX++;
-
-            totalMsgs++;
-            if(args.getNumMessages() > 0 && totalMsgs == args.getNumMessages()) break;
-        }
-        print("Finished Skeen TPC-C experiment. Elapsed: ", elapsed / 1e9, "seconds");
-    }
-
-    private short[] generateDests(int numDests) {
-        if(numDests == 1) return new short[]{(short)warehouseID};
-        short [] tempdst = new short[numDests];
-        if(numDests == 2) tempdst = generate2Dests();
-        if(numDests == 3) tempdst = generate3Dests();
-        if(numDests > 3) generateRandDests(tempdst, numDests);
-        Arrays.sort(tempdst);
-        return tempdst;
-    }
-
-    private void generateRandDests(short[] tempdst, int numDests) {
-        ArrayList<Short> array = new ArrayList<>();
-        array.add((short) warehouseID);
-        tempdst[0] = (short) warehouseID;
-        for(int i = 1; i < numDests; i++){
-            short newDst;
-            do {newDst = (short)randomNumber(0, (warehouseCount-1), gen);}
-            while (array.contains(newDst));
-            array.add(newDst);
-            tempdst[i] = newDst;
         }
     }
 
-    private short[] generate2Dests(){
-        short [] tempdst = new short[2];
-        tempdst[0] = (short) warehouseID;
-
-        if(randomNumber(1, 100, gen) <= localityPercentage)
-            tempdst[1] = getNearestWH(0);
-        else 
-            tempdst[1] = getNearestWH(1);
-
-        Arrays.sort(tempdst);
-
-        return tempdst;
-    }
-
-    private short[] generate3Dests(){
-        short [] tempdst = new short[3];
-        tempdst[0] = (short) warehouseID;
-        if(randomNumber(1, 100, gen) <= localityPercentage){
-            tempdst[1] = getNearestWH(0);
-            tempdst[2] = getNearestWH(1);
-        }else {
-            tempdst[1] = getNearestWH(1);
-            tempdst[2] = getNearestWH(2);
-        }
-        LinkedHashSet<Short> set = new LinkedHashSet<Short>();
- 
-        // remove duplicates
-        for (short s : tempdst) set.add(s);
-        short [] finaldst = new short[set.size()];
-        int i = 0;
-        for(short s : set){
-            finaldst[i] = s;
-            i++;
-        }
-        Arrays.sort(finaldst);
-
-        return finaldst;
-    }
-
-    private short getNearestWH(int index) {
-        short tempdst = -1;
-
-        try{tempdst = Short.valueOf(nearestWHs.get((short)warehouseID).split(" ")[index].trim());} catch(Exception e){}
-
-        if(tempdst == -1){
-            // simply get the next HW in order of id
-            tempdst = (short)(warehouseID+1);
-            if(tempdst == warehouseCount) tempdst = (short)(warehouseID-1);
-        }
-        return tempdst;
-    }
-
-    public int doNewOrder() {
+    public void doNewOrder() {
         int numItems = randomNumber(5, 15, gen);
         int[] supplierWarehouseIds = new int[numItems];
 
         for (int i = 0; i < numItems; i++) {
-            if (localOnly){
+            if (sanityCheck)
                 supplierWarehouseIds[i] = warehouseID;
-            }
             else {
                 if (randomNumber(1, 100, gen) > 1) {
                     supplierWarehouseIds[i] = warehouseID;
@@ -266,7 +137,7 @@ public class TpccSkeenClient extends SkeenClient {
         }
 
         ArrayList<Integer> dest = new ArrayList<>();
-        dest.add(warehouseID);
+        dest.add(warehouseID);  // Ramcast groups' index start from 0
         for (int warehouseId : supplierWarehouseIds) {
             if (!dest.contains(warehouseId)) {
                 dest.add(warehouseId);
@@ -301,14 +172,13 @@ public class TpccSkeenClient extends SkeenClient {
             partitionsAccessedMultiPartitionTxs += dest.size();
         }
         partitionsAccessedAllTxs += dest.size();
-        return dest.size();
     }
 
-    public int doPayment() {
+    public void doPayment() {
         int x = randomNumber(1, 100, gen);
         int customerWarehouseID;
 
-        if (localOnly) {
+        if (sanityCheck) {
             customerWarehouseID = warehouseID;
         } else {
             if (x <= 85) {
@@ -339,32 +209,28 @@ public class TpccSkeenClient extends SkeenClient {
             partitionsAccessedMultiPartitionTxs += dest.size();
         }
         partitionsAccessedAllTxs += dest.size();
-        return dest.size();
     }
 
-    public int doOrderStatus() {
+    public void doOrderStatus() {
         dest1++;
         numOrderStatusTx++;
         partitionsAccessedAllTxs += 1;
-        return 1;
     }
 
-    public int doDelivery() {
+    public void doDelivery() {
         dest1++;
         numDeliveryTx++;
         partitionsAccessedAllTxs += 1;
-        return 1;
     }
 
-    public int doStockLevel() {
+    public void doStockLevel() {
         dest1++;
         numStockLevelTx++;
         partitionsAccessedAllTxs += 1;
-        return 1;
     }
 
     public static int randomNumber(int min, int max, Random r) {
         return (int) (r.nextDouble() * (max - min + 1) + min);
     }
-
 }
+

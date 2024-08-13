@@ -10,6 +10,8 @@ import util.FileManager;
 import java.util.TreeSet;
 import base.Host;
 import base.Node;
+import skeen.messages.LightMessage;
+import skeen.messages.LightMessagesList;
 import skeen.messages.SkeenMessage;
 import skeen.messages.SkeenMessage.Type;
 import skeen.proxies.SkeenServerProxy;
@@ -20,7 +22,7 @@ public class SkeenNode extends SkeenServerProxy {
     protected ArrayList<SkeenMessage> pending;
     protected FileManager files;
     private HashMap<Integer, ArrayList<SkeenMessage>> receivedTimestamps;
-    private ArrayList<SkeenMessage> history = new ArrayList<>();
+    private LightMessagesList history = new LightMessagesList();
     
     public SkeenNode(short id, ArgsParser args){
         super(id, args.getClientCount());
@@ -107,7 +109,7 @@ public class SkeenNode extends SkeenServerProxy {
     }
 
     private void deliver(SkeenMessage m) {
-        history.add(m);
+        history.add(new LightMessage(m.getId(), m.getDst()));
         sendReply(m);
     }
 
@@ -135,11 +137,14 @@ public class SkeenNode extends SkeenServerProxy {
         if(ordered.size() > 0) print("Warning: ordered is not empty... =[");
         if(pending.size() > 0) print("Warning: pending is not empty... =[");
         if(receivedTimestamps.size() > 0) print("Warning: receivedTimestamps is not empty... =[");
+        files.persistMessages(history, getId(), false, false);
         print("-------------------------------------");
         print("Total msgs in the history:", history.size());
         print("Total local msgs received:", localMsgs);
         print("Total step1 received:", step1);
         print("Total step2 received:", step2);
+        //print("Avg msg size", Stats.of(getSizes()).mean());
+        files.persistMsgSizes(getSizes(), getId());
         print("-------------------------------------");
         files.nodeFinished(getId());
         exit();

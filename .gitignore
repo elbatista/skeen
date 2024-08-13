@@ -1,5 +1,6 @@
-bin/
-files/*
-logs/*
-results/*
+bin
+files
+logs
+results
 .DS_Store
+experiments
