@@ -158,7 +158,7 @@ public class Results {
         return values;
     }
 
-    private static void writeTPFile(HashMap<Integer, HashMap<String, Double>> tpValues, short nodes, String locality, int gc, String basedir, String cliregion) {
+    private static void writeTPFile(HashMap<Integer, HashMap<String, Double>> tpValues, short nodes, String locality, String basedir, String cliregion) {
         try {
             File directory = new File(String.valueOf(basedir+"/plots/tp"+cliregion));
             if (!directory.exists())  {
@@ -177,12 +177,12 @@ public class Results {
             printerOut = new PrintWriter(basedir+"/plots/tp"+cliregion+"/plot.p");
             printerOut.println( "set terminal pdf dashed size 5, 2.5 font \",18\" ");
             printerOut.println( "set key right top maxrow 2 ");
-            printerOut.println( "set ylabel \"TP (ops/sec)\" ");
+            printerOut.println( "set ylabel \"TP (kops/sec)\" ");
             printerOut.println( "set xlabel \"Time (sec)\" ");
             printerOut.println( "set grid ytics lt 0 lw 1 ");
             printerOut.println( "set grid xtics lt 0 lw 1 ");
             printerOut.println( "set output '"+basedir+"/plots/tp"+cliregion+"/tp.pdf' ");
-            printerOut.println( "plot '"+basedir+"/plots/tp"+cliregion+"/TP_Reconf.txt' using 1 t \"TP\" with lines ");
+            printerOut.println( "plot '"+basedir+"/plots/tp"+cliregion+"/TP_Reconf.txt' using ($1/1000) t \"TP\" with lines ");
             printerOut.flush();
             printerOut.close();
 
@@ -481,19 +481,19 @@ public class Results {
     public static void main(String ... args){
         // ArrayList<Double> latencies = new ArrayList<>();
         
-        String localities [] = {"95"};
-        short numnodes []    = {3};
-        String algos []      = {"flexcast"};// , "flexcast", "skeen"};
-        int clients []       = {150};//{24,240,480,720,960,1200,1440};
-        int gcflex           = 10000;
-        // int gcall            = 0;
-        // int dag              = 1;
-        String clilat        = "clilat";
-        String rc            = "rc30";
+        String localities [] = {"0"};
+        short numnodes []    = {8};
+        String algos []      = {"skeen"};// , "flexcast", "skeen"};
+        int clients []       = {42};//{24,240,480,720,960,1200,1440};
+        // int gcflex           = 10000;
+        // // int gcall            = 0;
+        // // int dag              = 1;
+        // String clilat        = "clilat";
+        // String rc            = "rc30";
 
         String cliregion = "";
 
-        String basedir = "experiments/flexcast-reconfig/"+numnodes[0]+"nodes/"+clients[0]+"cli/"+localities[0]+"%/gc"+gcflex+"/"+rc+"/"+clilat;
+        String basedir = "experiments/"+numnodes[0]+"nodes/"+clients[0]+"cli/"+localities[0]+"%";
 
         ArrayList<TPLine> tp = new ArrayList<>();
         HashMap<Integer, HashMap<String, Double>> tpValues = new HashMap<>();
@@ -543,7 +543,7 @@ public class Results {
                         // System.out.println(basedir);
                         // System.out.println("AVG Throughput: "+avgtp+" ops/sec");
                         if(tpValues.get(cli) == null) tpValues.put(cli, new HashMap<>());
-                        tpValues.get(cli).put(algo+"_gc"+gcflex, avgtp);
+                        tpValues.get(cli).put(algo, avgtp);
 
                         // ###################### Msg Sizes ######################
                         // processMsgSizeFilesDiscrete(basedir+"/files", nodes, locality, gc, cli, algo, nodeMap);
@@ -553,7 +553,7 @@ public class Results {
                     }
                     
                 }
-                writeTPFile(tpValues, nodes, locality, gcflex, basedir, cliregion);
+                writeTPFile(tpValues, nodes, locality, basedir, cliregion);
             }
         }
 

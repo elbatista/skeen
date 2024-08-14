@@ -206,6 +206,18 @@ public class SkeenMessage extends BaseObj implements Externalizable, Comparable<
             }
         }
         out.writeLong(orderDate.getTime());
+
+
+        // write fixed 64 bytes payload 
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+        out.writeLong(Long.MAX_VALUE);
+
     }
 
     @Override
@@ -266,6 +278,16 @@ public class SkeenMessage extends BaseObj implements Externalizable, Comparable<
             }
         }
         orderDate = new Date(in.readLong());
+
+        // read fixed 64 bytes payload 
+        in.readLong();
+        in.readLong();
+        in.readLong();
+        in.readLong();
+        in.readLong();
+        in.readLong();
+        in.readLong();
+        in.readLong();
     }
     
     public short getMinDest() {

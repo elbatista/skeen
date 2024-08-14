@@ -4,3 +4,4 @@ logs
 results
 .DS_Store
 experiments
+*.gz

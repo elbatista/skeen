@@ -14,7 +14,7 @@ localm=${13}
 
 for i in $(seq 1 $clispernode)
 do
-    java -cp "bin/*:lib/*" MainClient -c $clients -i $ID -d $duration -l $locality -w $warehouse -m $msgs $log -localMsgs >> $basedir/logs/client$ID.txt &
+    java -cp "bin/*:lib/*" MainClient -c $clients -i $ID -d $duration  $log -np 4 >> $basedir/logs/client$ID.txt &
     sleep .1
     ID=$(($ID+1));
 done

@@ -1,13 +1,10 @@
-import skeen.SkeenClient;
-import skeen.TpccSkeenClient;
+import skeen.SkeenClientNoLocality;
 import util.ArgsParser;
 
 public class MainClient {
     public static void main(String args[]){
         ArgsParser p = ArgsParser.getClientParser(args);
-        if(p.isTpcc())
-            new TpccSkeenClient(p.getId(), p);
-        else
-            new SkeenClient(p.getId(), p, true);
+        
+        new SkeenClientNoLocality(p.getId(), p, true);
     }
 }

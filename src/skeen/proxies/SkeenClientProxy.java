@@ -151,7 +151,7 @@ public class SkeenClientProxy extends Node {
         startTime = System.nanoTime();
         dsts = m.getDst();
 
-        send(m, warehouse);
+        send(m, m.getDst()[0]);
 
         try {
             sema.acquire();
